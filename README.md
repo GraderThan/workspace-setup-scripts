@@ -1,6 +1,6 @@
-# GraderThan Workspace Templates
+# Grader Than Workspace Templates
 
-A collection of setup scripts used to initialize development environments for different languages and frameworks in the GraderThan Workspace. These scripts are designed to provide a low barrier to entry for academic environments.
+A collection of setup scripts used to initialize development environments for different languages and frameworks in the Grader Than Workspace. These scripts are designed to provide a low barrier to entry for academic environments.
 
 ## Overview
 
