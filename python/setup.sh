@@ -13,14 +13,11 @@ PROJECT_DIR=${1:-$DEFAULT_PROJECT_DIR}
 
 # If venv does not exist, create it
 if [ ! -d "$PROJECT_DIR/.venv" ]; then
-    python3 -m venv "$PROJECT_DIR/.venv"
-
-    $PROJECT_DIR/.venv/bin/pip install --upgrade \
-      pip \
-      setuptools \
-      wheel
-
-    $PROJECT_DIR/.venv/bin/pip install \
+    uv venv "$PROJECT_DIR/.venv"
+    
+    source "$PROJECT_DIR/.venv/bin/activate"
+    
+    uv pip install \
       black \
       isort \
       mypy \
