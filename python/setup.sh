@@ -37,14 +37,13 @@ installGlobalPackages() {
 # If venv does not exist, create it
 if [ ! -d "$PROJECT_DIR/.venv" ]; then
     python3 -m venv "$PROJECT_DIR/.venv"
-    source "$PROJECT_DIR/.venv/bin/activate"
 
-    pip install --upgrade \
+    $PROJECT_DIR/.venv/bin/pip install --upgrade \
       pip \
       setuptools \
       wheel
 
-    pip install \
+    $PROJECT_DIR/.venv/bin/pip install \
       black \
       isort \
       mypy \
