@@ -25,12 +25,6 @@ installGlobalPackages() {
       ipyvolume \
       nglview \
       mobilechelonian \
-      ipykernel \ 
-      ipython \
-      ruff \
-      black \
-      flake8 \
-      autopep8 \
       pre-commit
 }
 
