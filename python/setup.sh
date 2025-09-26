@@ -24,7 +24,14 @@ installGlobalPackages() {
       ipyleaflet \
       ipyvolume \
       nglview \
-      mobilechelonian
+      mobilechelonian \
+      ipykernel \ 
+      ipython \
+      ruff \
+      black \
+      flake8 \
+      autopep8 \
+      pre-commit
 }
 
 (
@@ -51,9 +58,9 @@ if [ ! -d "$PROJECT_DIR/.venv" ]; then
       pytest \
       pytest-cov \
       ipython \
+      ipykernel \
       jupyterlab \
-      rope \
-      pre-commit
+      rope
 
     echo "[$SCRIPT_DIR] Python virtual environment created and packages installed successfully."
 else
