@@ -11,24 +11,6 @@ trap 'failure $LINENO "$BASH_COMMAND"' ERR
 DEFAULT_PROJECT_DIR="/home/$USERNAME/Documents/code"
 PROJECT_DIR=${1:-$DEFAULT_PROJECT_DIR}
 
-installGlobalPackages() {
-    # Install global Python packages
-    pip install \
-      bqplot \
-      pythreejs \
-      ipyleaflet \
-      ipyvolume \
-      nglview \
-      mobilechelonian \
-      pre-commit
-}
-
-(
-  installGlobalPackages &&
-  echo "[$SCRIPT_DIR] Global Python packages installed successfully." ||
-  echo "[$SCRIPT_DIR] Warning: Some optional global packages failed to install"
-) &
-
 # If venv does not exist, create it
 if [ ! -d "$PROJECT_DIR/.venv" ]; then
     python3 -m venv "$PROJECT_DIR/.venv"
@@ -48,6 +30,12 @@ if [ ! -d "$PROJECT_DIR/.venv" ]; then
       ipython \
       ipykernel \
       jupyterlab \
+      bqplot \
+      pythreejs \
+      ipyleaflet \
+      ipyvolume \
+      nglview \
+      mobilechelonian \
       rope
 
     echo "[$SCRIPT_DIR] Python virtual environment created and packages installed successfully."
