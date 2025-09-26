@@ -13,11 +13,6 @@ PROJECT_DIR=${1:-$DEFAULT_PROJECT_DIR}
 
 installGlobalPackages() {
     # Install global Python packages
-    pip install --upgrade \
-      pip \
-      setuptools \
-      wheel
-
     pip install \
       bqplot \
       pythreejs \
