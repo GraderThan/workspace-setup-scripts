@@ -13,7 +13,7 @@ PROJECT_DIR=${1:-$DEFAULT_PROJECT_DIR}
 
 # If venv does not exist, create it
 if [ ! -d "$PROJECT_DIR/.venv" ]; then
-    uv venv "$PROJECT_DIR/.venv"
+    uv venv "$PROJECT_DIR/.venv" --managed-python -p 3.12 --seed --no-project
     
     source "$PROJECT_DIR/.venv/bin/activate"
     
@@ -27,6 +27,7 @@ if [ ! -d "$PROJECT_DIR/.venv" ]; then
       ipython \
       ipykernel \
       jupyterlab \
+      ipywidgets \
       bqplot \
       pythreejs \
       ipyleaflet \
