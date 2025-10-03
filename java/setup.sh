@@ -18,8 +18,6 @@ setupJupyterKernels(){
   jbang install-kernel@jupyter-java
 }
 
-(
-  setupJupyterKernels &&
-  echo "[$SCRIPT_DIR] Kernel installed successfully." ||
-  echo "[$SCRIPT_DIR] Warning: Kernel packages failed to install"
-) &
+setupJupyterKernels &&
+echo "[$SCRIPT_DIR] Kernel installed successfully." ||
+echo "[$SCRIPT_DIR] Warning: Kernel packages failed to install"
