@@ -23,22 +23,12 @@ setupJupyterKernels(){
   echo "[$SCRIPT_DIR] Warning: Kernel packages failed to install"
 ) &
 
-# if the project dir is empty initialize it
-if [ -z "$(ls -A $PROJECT_ROOT)" ]; then
-  mkdir -p $PROJECT_ROOT/src
-  mkdir -p $PROJECT_ROOT/build
-  mkdir -p $PROJECT_ROOT/lib
-  mkdir -p $PROJECT_ROOT/include
-  mkdir -p $PROJECT_ROOT/test
-fi
-
 # Copy run-c and run-cpp to system bin
 if [ ! -f /usr/local/bin/run-c ]; then
-  cp "$SCRIPT_DIR/run-c" /usr/local/bin/run-c
-  chmod +x /usr/local/bin/run-c
+  sudo install -m 755 "$SCRIPT_DIR/run-c" /usr/local/bin/run-c
+
 fi
 
 if [ ! -f /usr/local/bin/run-cpp ]; then
-  cp "$SCRIPT_DIR/run-cpp" /usr/local/bin/run-cpp
-  chmod +x /usr/local/bin/run-cpp
+  sudo install -m 755 "$SCRIPT_DIR/run-cpp" /usr/local/bin/run-cpp
 fi
