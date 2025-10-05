@@ -7,12 +7,12 @@
 DEFAULT_BUILD_DIR="/tmp/graderthan/ide/cpp/build"
 DEFAULT_BUILD_CMD_TEMPLATE="-fmodules-ts %SOURCES% -g -std=c++20 -Werror=uninitialized -Werror=nonnull -Werror=format -Werror=bool-compare -Werror=return-type -Werror=array-bounds -o"
 DEFAULT_OUTPUT_NAME="app.bin"
-DEFAULT_COMPILER="g++-11"
+DEFAULT_COMPILER="clang++"
 
 BUILD_DIR="${DEFAULT_BUILD_DIR}"
 CUSTOM_BUILD_CMD=""
-OUTPUT_NAME="" # Will be set by option or default later
-VERBOSE=0 # 0 = false, 1 = true
+OUTPUT_NAME=""
+VERBOSE=0
 COMPILER="${DEFAULT_COMPILER}"
 SOURCES=""
 
@@ -25,34 +25,29 @@ verbose_echo() {
 
 # Parse command-line options
 TEMP=$(getopt -o d:c:o:C:vh --long build-dir:,build-cmd:,output:,compiler:,verbose,help -n 'run-cpp' -- "$@")
-if [ $? != 0 ] ; then echo "Terminating..." >&2 ; exit 1 ; fi
-
-# Note the quotes around "$TEMP": they are essential!
+if [ $? != 0 ]; then echo "Terminating..." >&2; exit 1; fi
 eval set -- "$TEMP"
 
-while true ; do
+while true; do
     case "$1" in
         -d|--build-dir) BUILD_DIR="$2"; shift 2 ;;
         -c|--build-cmd) CUSTOM_BUILD_CMD="$2"; shift 2 ;;
         -o|--output) OUTPUT_NAME="$2"; shift 2 ;;
-        -C|--compiler) COMPILER="$2"; shift 2;;
+        -C|--compiler) COMPILER="$2"; shift 2 ;;
         -v|--verbose) VERBOSE=1; shift ;;
         -h|--help)
             echo "Usage: $0 [options] [source-files...]"
             echo ""
             echo "Options:"
             echo "  -d, --build-dir DIR   Specify the build directory (default: ${DEFAULT_BUILD_DIR})"
-            echo "  -c, --build-cmd CMD   Specify the full build command (replaces default g++ command)"
-            echo "                        The command should include the output path placeholder '%OUTPUT%'"
-            echo "                        and the sources placeholder '%SOURCES%'."
-            echo "                        Example: 'clang++ %SOURCES% -o %OUTPUT%'"
+            echo "  -c, --build-cmd CMD   Specify a full build command template using %OUTPUT% and %SOURCES%"
             echo "  -o, --output NAME     Specify the output executable filename (default: ${DEFAULT_OUTPUT_NAME})"
             echo "  -C, --compiler NAME   Specify the C++ compiler (default: ${DEFAULT_COMPILER})"
             echo "  -v, --verbose         Enable verbose output"
             echo "  -h, --help            Show this help message"
             exit 0 ;;
-        --) shift ; break ;;
-        *) echo "Internal error!" ; exit 1 ;;
+        --) shift; break ;;
+        *) echo "Internal error!"; exit 1 ;;
     esac
 done
 
@@ -73,24 +68,36 @@ fi
 # Construct the full output path
 OUTPUT_PATH="${BUILD_DIR}/${OUTPUT_NAME}"
 
+# Ensure the build directory exists
+verbose_echo "Ensuring directory ${BUILD_DIR} exists..."
+mkdir -p "${BUILD_DIR}"
+
+# Auto-detect compiler if specified one is missing
+if ! command -v "${COMPILER}" >/dev/null 2>&1; then
+    verbose_echo "Compiler '${COMPILER}' not found, trying alternatives..."
+    if command -v clang++ >/dev/null 2>&1; then
+        COMPILER="clang++"
+    elif command -v g++ >/dev/null 2>&1; then
+        COMPILER="g++"
+    else
+        echo "No suitable C++ compiler found. Please install clang++ or g++." >&2
+        exit 1
+    fi
+    verbose_echo "Using compiler: ${COMPILER}"
+fi
+
 # Clean the specific output file if it exists
 if [ -f "${OUTPUT_PATH}" ]; then
   verbose_echo "Removing existing executable ${OUTPUT_PATH}..."
   rm -f "${OUTPUT_PATH}"
 fi
 
-# Ensure the build directory exists
-verbose_echo "Ensuring directory ${BUILD_DIR} exists..."
-mkdir -p "${BUILD_DIR}"
-
 # Construct the build command
 if [ -n "${CUSTOM_BUILD_CMD}" ]; then
-    # Use custom build command
     BUILD_CMD="${CUSTOM_BUILD_CMD//%OUTPUT%/${OUTPUT_PATH}}"
     BUILD_CMD="${BUILD_CMD//%SOURCES%/${SOURCES}}"
     verbose_echo "Using custom build command: ${BUILD_CMD}"
 else
-    # Use default build command template
     BUILD_CMD="${COMPILER} ${DEFAULT_BUILD_CMD_TEMPLATE//%SOURCES%/${SOURCES}} \"${OUTPUT_PATH}\""
     verbose_echo "Using default build command: ${BUILD_CMD}"
 fi
@@ -108,10 +115,8 @@ COMPILE_STATUS=$?
 # Check if compilation was successful
 if [ ${COMPILE_STATUS} -ne 0 ]; then
   echo "Compilation failed." >&2
-  # If not verbose, print the compiler output on failure
   if [ "$VERBOSE" -eq 0 ]; then
       echo "Compiler output:" >&2
-      # Re-run compile command without redirection to show errors
       bash -c "${BUILD_CMD}"
   fi
   exit 1
@@ -120,5 +125,4 @@ fi
 # Run the compiled executable
 verbose_echo "Running ${OUTPUT_PATH}..."
 "${OUTPUT_PATH}"
-
 exit $?
