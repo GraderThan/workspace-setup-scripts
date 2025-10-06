@@ -48,4 +48,4 @@ fi
 # Run the language-specific setup script
 echo "Setting up $CODE_LANGUAGE environment..."
 chmod +x "$LANGUAGE_DIR/setup.sh"
-bash "$LANGUAGE_DIR/setup.sh" "$PROJECT_ROOT" "$CACHE_DIR"
+"$LANGUAGE_DIR/setup.sh" "$PROJECT_ROOT" "$CACHE_DIR"
