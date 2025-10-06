@@ -1,7 +1,7 @@
 {
   "name": "graderthan-workspace-javascript",
   "version": "1.0.0",
-  "description": "GraderThan Workspace JavaScript starter project",
+  "description": "Grader Than Workspace JavaScript starter project",
   "main": "index.js",
   "scripts": {
     "test": "jest",
