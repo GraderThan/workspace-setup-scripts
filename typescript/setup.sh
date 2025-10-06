@@ -13,12 +13,38 @@ PROJECT_DIR=${1:-$DEFAULT_PROJECT_DIR}
 SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
 
 setupJupyterKernels(){
-    # Installs javascript jupyter kernel
-    npm install -g tslab
-    tslab install --python=python3
-
-    # Remove the javascript kernel
-    rm -rf /usr/local/share/jupyter/kernels/jslab
+  USER_HOME="/home/$USERNAME"
+  # 1) Install tslab if not already installed
+  if [ ! -d "$USER_HOME/.local/node_modules/tslab" ]; then
+    echo "→ Installing tslab locally..."
+    npm install --prefix "$USER_HOME/.local" tslab
+  else
+    echo "✓ tslab already installed at $USER_HOME/.local/node_modules/tslab"
+  fi
+  
+  # 2) Register the Jupyter kernel (if not yet registered)
+  if ! jupyter kernelspec list 2>/dev/null | grep -q tslab; then
+    echo "→ Registering tslab kernel with Jupyter..."
+    "$USER_HOME/.local/node_modules/tslab/bin/tslab" install --python=python3
+  else
+    echo "✓ tslab kernel already registered"
+  fi
+  
+  # 3) Ensure ~/.local/bin exists
+  if [ ! -d "$USER_HOME/.local/bin" ]; then
+    echo "→ Creating $USER_HOME/.local/bin..."
+    mkdir -p "$USER_HOME/.local/bin"
+  fi
+  
+  # 4) Symlink tslab CLI into ~/.local/bin if missing or broken
+  if [ ! -x "$USER_HOME/.local/bin/tslab" ]; then
+    echo "→ Linking tslab binary into ~/.local/bin..."
+    ln -sf "$USER_HOME/.local/node_modules/.bin/tslab" "$USER_HOME/.local/bin/tslab"
+  else
+    echo "✓ tslab link already exists: $USER_HOME/.local/bin/tslab"
+  fi
+  
+  echo "✓ tslab installation complete!"
 }
 
 (
