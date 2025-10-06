@@ -1,0 +1,60 @@
+local({
+  # ---- CRAN mirror ----
+  repos <- getOption("repos")
+  if (is.null(repos) || isTRUE(repos["CRAN"] == "@CRAN@")) repos <- c()
+  repos["CRAN"] <- "__CRAN_URL__"  # e.g. PPM noble/jammy URL
+  options(repos = repos)
+
+  # ---- Nix: no bspm (leave blank on Nix; fill only on apt-based hosts) ----
+  # __BSPM_BLOCK__
+
+  # ---- Parallel source builds + reliable downloads ----
+  options(
+    Ncpus = max(1L, parallel::detectCores() - 1L),
+    download.file.method = "libcurl"
+  )
+
+  # ---- Fast installer helper (no installed.packages() scan) ----
+  fast_install <- function(pkgs) {
+    missing <- pkgs[!vapply(pkgs, requireNamespace, logical(1), quietly = TRUE)]
+    if (!length(missing)) return(invisible(TRUE))
+    if (requireNamespace("pak", quietly = TRUE)) {
+      pak::pkg_install(missing, ask = FALSE)
+    } else {
+      install.packages(missing)
+    }
+    invisible(TRUE)
+  }
+  options(graderthan.fast_install = fast_install)
+
+  # ---- Friendly defaults ----
+  options(stringsAsFactors = FALSE, scipen = 999, width = 100)
+
+  # ---- Interactive-only classroom niceties ----
+  if (interactive()) {
+    startup_pkgs <- c(__STARTUP_PKGS__)
+    invisible(lapply(startup_pkgs, function(pkg) {
+      if (requireNamespace(pkg, quietly = TRUE)) library(pkg, character.only = TRUE)
+    }))
+
+    # Quieter output for students (optional)
+    options(
+      dplyr.summarise.inform = FALSE,
+      readr.show_col_types = FALSE
+    )
+
+    # VS Code: auto-use httpgd if available (optional, harmless)
+    if (requireNamespace("httpgd", quietly = TRUE)) {
+      options(device = function(...) httpgd::hgd(silent = TRUE))
+      if (interactive()) try(httpgd::hgd_browse(), silent = TRUE)
+    }
+
+    cat("\033[1;34mGrader Than - R Profile Loaded (Nix)\033[0m\n")
+    cat(" - CRAN:", repos[["CRAN"]], "\n")
+    cat(" - Ncpus:", getOption("Ncpus"), "\n")
+    if (requireNamespace("pak", quietly = TRUE)) cat(" - pak: available (fast installs)\n")
+  }
+})
+
+# Use like: getOption("graderthan.fast_install")(c("ggplot2","dplyr"))
+
