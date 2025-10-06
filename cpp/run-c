@@ -1,111 +1,223 @@
-#!/bin/bash
+#!/usr/bin/env python3
+"""
+run-c: compile and run C projects.
 
-# Script to compile and run C files in the current directory.
-# Usage: ./run-c [options]
+Defaults:
+  - Compiler: clang (falls back to $CC, then gcc, then cc)
+  - C standard: C11
+  - Build dir: /tmp/graderthan/ide/c/build
+  - Output: app.bin
 
-# Default values
-DEFAULT_BUILD_DIR="/tmp/graderthan/ide/c/build"
-# Using gcc, standard C11, common warnings enabled
-DEFAULT_BUILD_CMD_TEMPLATE="gcc *.c -g -std=c11 -Wall -Wextra -Wpedantic -Werror=implicit-function-declaration -Werror=incompatible-pointer-types -Werror=int-conversion -Werror=return-type -Werror=format -o"
-DEFAULT_OUTPUT_NAME="app.bin"
+Behavior:
+  - If you pass one or more source FILES or DIRS, this (by default) also adds all sibling
+    *.c in each provided path's directory AND its subdirectories (recursive).
+    Use --no-siblings to restrict to exactly what you passed.
+    Use --no-recursive to include only the top-level directory.
+  - If you pass no sources, it compiles *.c from the CURRENT directory (recursive by default).
+  - Custom build template (-c/--build-cmd) must include %SOURCES% and %OUTPUT%.
 
-BUILD_DIR="${DEFAULT_BUILD_DIR}"
-BUILD_CMD_TEMPLATE="${DEFAULT_BUILD_CMD_TEMPLATE}"
-CUSTOM_BUILD_CMD=""
-OUTPUT_NAME="" # Will be set by option or default later
-VERBOSE=0 # 0 = false, 1 = true
+Examples:
+  run-c /path/to/cli.c                   # compiles all *.c under /path/to (recursive)
+  run-c --no-recursive /path/to/cli.c    # compiles all *.c beside cli.c (no subdirs)
+  run-c --no-siblings /path/to/cli.c     # compiles only cli.c
+  run-c /path/to/project/                # compiles all *.c under that dir (recursive)
+  run-c                                   # compiles *.c under cwd (recursive)
+  run-c -c "clang -O2 %SOURCES% -o %OUTPUT%"
+"""
 
-# Function to print messages only if VERBOSE is true
-verbose_echo() {
-    if [ "$VERBOSE" -eq 1 ]; then
-        echo "$@"
-    fi
-}
+import argparse
+import glob
+import os
+import shlex
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+from typing import Iterable, List, Optional, Set
 
-# Parse command-line options
-TEMP=$(getopt -o d:c:o:vh --long build-dir:,build-cmd:,output:,verbose,help -n 'run-c' -- "$@")
-if [ $? != 0 ] ; then echo "Terminating..." >&2 ; exit 1 ; fi
+DEFAULT_BUILD_DIR = "/tmp/graderthan/ide/c/build"
+DEFAULT_OUTPUT_NAME = "app.bin"
+DEFAULT_COMPILER = "clang"
+DEFAULT_BUILD_CMD_TEMPLATE = (
+    "%SOURCES% -g -std=c11 -Wall -Wextra -Wpedantic "
+    "-Werror=implicit-function-declaration "
+    "-Werror=incompatible-pointer-types "
+    "-Werror=int-conversion "
+    "-Werror=return-type "
+    "-Werror=format -o"
+)
 
-# Note the quotes around "$TEMP": they are essential!
-eval set -- "$TEMP"
 
-while true ; do
-    case "$1" in
-        -d|--build-dir) BUILD_DIR="$2"; shift 2 ;;
-        -c|--build-cmd) CUSTOM_BUILD_CMD="$2"; shift 2 ;;
-        -o|--output) OUTPUT_NAME="$2"; shift 2 ;;
-        -v|--verbose) VERBOSE=1; shift ;;
-        -h|--help)
-            echo "Usage: $0 [options]"
-            echo ""
-            echo "Options:"
-            echo "  -d, --build-dir DIR   Specify the build directory (default: ${DEFAULT_BUILD_DIR})"
-            echo "  -c, --build-cmd CMD   Specify the full build command (replaces default gcc command)"
-            echo "                        The command should include the output path placeholder '%OUTPUT%'"
-            echo "                        Example: 'clang *.c -o %OUTPUT%'"
-            echo "  -o, --output NAME     Specify the output executable filename (default: ${DEFAULT_OUTPUT_NAME})"
-            echo "  -v, --verbose         Enable verbose output"
-            echo "  -h, --help            Show this help message"
-            exit 0 ;;
-        --) shift ; break ;;
-        *) echo "Internal error!" ; exit 1 ;;
-    esac
-done
+def which(cmd: str) -> Optional[str]:
+    return shutil.which(cmd)
 
-# Check if output name was provided, otherwise use default
-if [ -z "${OUTPUT_NAME}" ]; then
-    OUTPUT_NAME="${DEFAULT_OUTPUT_NAME}"
-    verbose_echo "Output filename not specified, defaulting to ${OUTPUT_NAME}"
-fi
 
-# Construct the full output path
-OUTPUT_PATH="${BUILD_DIR}/${OUTPUT_NAME}"
+def pick_c_compiler(preferred: Optional[str]) -> str:
+    if preferred and which(preferred):
+        return preferred
+    cc = os.environ.get("CC")
+    if cc and which(cc):
+        return cc
+    for cand in ("clang", "gcc", "cc"):
+        if which(cand):
+            return cand
+    for base, rng in (("clang-", range(30, 9, -1)), ("gcc-", range(20, 9, -1))):
+        for v in rng:
+            cand = f"{base}{v}"
+            if which(cand):
+                return cand
+    sys.stderr.write(
+        "No suitable C compiler found (tried --compiler, $CC, clang, gcc, cc, and versioned variants).\n"
+    )
+    sys.exit(1)
 
-# Clean the specific output file if it exists
-if [ -f "${OUTPUT_PATH}" ]; then
-  verbose_echo "Removing existing executable ${OUTPUT_PATH}..."
-  rm -f "${OUTPUT_PATH}"
-fi
 
-# Ensure the build directory exists
-verbose_echo "Ensuring directory ${BUILD_DIR} exists..."
-mkdir -p "${BUILD_DIR}"
+def collect_c_files_from_dir(root: Path, recursive: bool) -> Iterable[Path]:
+    if recursive:
+        return (p for p in root.rglob("*.c") if p.is_file())
+    else:
+        return (p for p in root.glob("*.c") if p.is_file())
 
-# Construct and execute the build command
-if [ -n "${CUSTOM_BUILD_CMD}" ]; then
-    # Use custom build command, replacing %OUTPUT% with the actual path
-    BUILD_CMD="${CUSTOM_BUILD_CMD//%OUTPUT%/${OUTPUT_PATH}}"
-    verbose_echo "Using custom build command: ${BUILD_CMD}"
-else
-    # Use default build command template
-    BUILD_CMD="${BUILD_CMD_TEMPLATE} \"${OUTPUT_PATH}\""
-    verbose_echo "Using default build command: ${BUILD_CMD}"
-fi
 
-verbose_echo "Compiling..."
-# Use eval to handle potential spaces and quotes in the command correctly
-# Redirect compile stdout/stderr only if not verbose
-if [ "$VERBOSE" -eq 1 ]; then
-    eval ${BUILD_CMD}
-else
-    eval ${BUILD_CMD} > /dev/null 2>&1
-fi
-COMPILE_STATUS=$?
+def normalize_sources(argv_paths: List[str], include_siblings: bool, recursive: bool) -> List[Path]:
+    """
+    If user provided paths:
+      - Resolve them (files or directories).
+      - Start with explicitly provided files.
+      - If include_siblings: for each provided file/dir, add *.c from that dir (and subdirs if recursive).
+    If none provided:
+      - Compile *.c from cwd (recursive by default).
+    """
+    result: Set[Path] = set()
 
-# Check if compilation was successful
-if [ ${COMPILE_STATUS} -ne 0 ]; then
-  echo "Compilation failed." >&2
-  # If not verbose, print the compiler output on failure
-  if [ "$VERBOSE" -eq 0 ]; then
-      echo "Compiler output:" >&2
-      # Re-run compile command without redirection to show errors
-      eval ${BUILD_CMD}
-  fi
-  exit 1
-fi
+    if argv_paths:
+        given_paths = [Path(s).resolve() for s in argv_paths]
 
-# Run the compiled executable
-verbose_echo "Running ${OUTPUT_PATH}..."
-"${OUTPUT_PATH}"
+        # Add explicit files only (keep exactly what was specified)
+        for p in given_paths:
+            if p.is_file() and p.suffix == ".c":
+                result.add(p)
 
-exit $?
+        if include_siblings:
+            dirs: Set[Path] = set()
+            for p in given_paths:
+                if p.is_dir():
+                    dirs.add(p)
+                else:
+                    dirs.add(p.parent)
+
+            for d in dirs:
+                for f in collect_c_files_from_dir(d, recursive=recursive):
+                    result.add(f)
+    else:
+        # No args: collect from cwd
+        cwd = Path(".").resolve()
+        for f in collect_c_files_from_dir(cwd, recursive=recursive):
+            result.add(f)
+
+    return sorted(result)
+
+
+def build_command(compiler: str, sources: List[Path], output_path: Path, custom_template: Optional[str]) -> str:
+    sources_str = " ".join(shlex.quote(str(s)) for s in sources)
+
+    if custom_template:
+        cmd = custom_template.replace("%OUTPUT%", shlex.quote(str(output_path)))
+        cmd = cmd.replace("%SOURCES%", sources_str)
+        return cmd
+
+    template = DEFAULT_BUILD_CMD_TEMPLATE.replace("%SOURCES%", sources_str)
+    parts = [shlex.quote(compiler), template, shlex.quote(str(output_path))]
+    return " ".join(parts)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("-d", "--build-dir", default=DEFAULT_BUILD_DIR)
+    parser.add_argument("-c", "--build-cmd", default=None,
+                        help="Full build command template with %OUTPUT% and %SOURCES% placeholders.")
+    parser.add_argument("-o", "--output", default=None)
+    parser.add_argument("-C", "--compiler", default=None)
+    parser.add_argument("--no-siblings", action="store_true",
+                        help="Do NOT auto-include sibling *.c files next to provided paths.")
+    parser.add_argument("--no-recursive", action="store_true",
+                        help="When including siblings or scanning dirs, do NOT recurse into subdirectories.")
+    parser.add_argument("-v", "--verbose", action="store_true")
+    parser.add_argument("-h", "--help", action="store_true")
+    parser.add_argument("paths", nargs="*",
+                        help="Source files or directories to compile.")
+    args = parser.parse_args()
+
+    if args.help:
+        print(__doc__)
+        return 0
+
+    recursive = not args.no_recursive
+    sources = normalize_sources(args.paths, include_siblings=not args.no_siblings, recursive=recursive)
+
+    if not sources:
+        sys.stderr.write("No C sources found.\n")
+        return 1
+
+    if args.verbose:
+        print("Sources:")
+        for p in sources:
+            print(f"  {p}")
+
+    compiler = pick_c_compiler(args.compiler)
+    if args.verbose:
+        print(f"Using compiler: {compiler}")
+
+    build_dir = Path(args.build_dir).resolve()
+    output_name = args.output or DEFAULT_OUTPUT_NAME
+    output_path = build_dir / output_name
+
+    if args.verbose:
+        print(f"Ensuring build directory exists: {build_dir}")
+    build_dir.mkdir(parents=True, exist_ok=True)
+
+    if output_path.exists():
+        if args.verbose:
+            print(f"Removing existing executable: {output_path}")
+        try:
+            output_path.unlink()
+        except OSError as e:
+            sys.stderr.write(f"Failed to remove existing output: {e}\n")
+            return 1
+
+    cmd = build_command(compiler, sources, output_path, args.build_cmd)
+    if args.verbose:
+        print("Build command:")
+        print(f"  {cmd}")
+        print("Compiling...")
+
+    if args.verbose:
+        proc = subprocess.run(cmd, shell=True)
+        rc = proc.returncode
+        if rc != 0:
+            print("Compilation failed.", file=sys.stderr)
+            return rc or 1
+    else:
+        proc = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        rc = proc.returncode
+        if rc != 0:
+            print("Compilation failed.", file=sys.stderr)
+            print("Compiler output:", file=sys.stderr)
+            if proc.stdout:
+                sys.stderr.write(proc.stdout)
+            if proc.stderr:
+                sys.stderr.write(proc.stderr)
+            return rc or 1
+
+    if args.verbose:
+        print(f"Running {output_path}...")
+    try:
+        run = subprocess.run([str(output_path)])
+        return run.returncode
+    except OSError as e:
+        sys.stderr.write(f"Failed to run {output_path}: {e}\n")
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
