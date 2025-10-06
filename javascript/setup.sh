@@ -13,6 +13,7 @@ PROJECT_DIR=${1:-$DEFAULT_PROJECT_ROOT}
 SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
 
 setupJupyterKernels(){
+  USER_HOME="/home/$USERNAME"
   # 1) Install tslab if not already installed
   if [ ! -d "$USER_HOME/.local/node_modules/tslab" ]; then
     echo "→ Installing tslab locally..."
