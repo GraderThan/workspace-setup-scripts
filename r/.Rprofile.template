@@ -5,8 +5,8 @@ local({
   repos["CRAN"] <- "__CRAN_URL__"  # e.g. PPM noble/jammy URL
   options(repos = repos)
 
-  # ---- Nix: no bspm (leave blank on Nix; fill only on apt-based hosts) ----
-  # __BSPM_BLOCK__
+  # ---- BSPM (auto-inserted on Ubuntu) ----
+  __BSPM_BLOCK__
 
   # ---- Parallel source builds + reliable downloads ----
   options(
@@ -43,16 +43,20 @@ local({
       readr.show_col_types = FALSE
     )
 
-    # VS Code: auto-use httpgd if available (optional, harmless)
+    # VS Code: auto-use httpgd if available (optional)
     if (requireNamespace("httpgd", quietly = TRUE)) {
       options(device = function(...) httpgd::hgd(silent = TRUE))
       if (interactive()) try(httpgd::hgd_browse(), silent = TRUE)
     }
 
-    cat("\033[1;34mGrader Than - R Profile Loaded (Nix)\033[0m\n")
+    cat("\033[1;34mGrader Than - R Profile Loaded (Ubuntu/Nix)\033[0m\n")
     cat(" - CRAN:", repos[["CRAN"]], "\n")
     cat(" - Ncpus:", getOption("Ncpus"), "\n")
     if (requireNamespace("pak", quietly = TRUE)) cat(" - pak: available (fast installs)\n")
+    if (requireNamespace("bspm", quietly = TRUE)) {
+      # Just a friendly hint; enablement is handled above if inserted
+      cat(" - bspm: package detected\n")
+    }
   }
 })
 

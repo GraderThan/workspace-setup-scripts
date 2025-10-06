@@ -1,160 +1,192 @@
-#!/usr/bin/env bash
-set -eEuo pipefail
+#!/usr/bin/env python3
+import os
+import sys
+import shlex
+import subprocess
+import threading
+from pathlib import Path
+from typing import Optional
 
-failure() {
-  local lineno=$1 msg=$2
-  echo "Failed at $0 line $lineno: $msg" >&2
-}
-trap 'failure $LINENO "$BASH_COMMAND"' ERR
+SCRIPT_DIR = Path(__file__).resolve().parent
+HOME_DIR = Path(os.environ.get("HOME") or f"/home/{os.environ.get('USERNAME','developer')}")
 
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
-HOME_DIR="${HOME:-/home/${USERNAME:-developer}}"
-
-echo "[info] SCRIPT_DIR=$SCRIPT_DIR"
-echo "[info] HOME_DIR=$HOME_DIR"
-
-# =============================================================================
-# (A) Jupyter Kernels — run in background and DO NOT wait
-# =============================================================================
-setupJupyterKernels() {
-  # placeholder; add your kernel installs here
-  :
-}
-
-(
-  setupJupyterKernels &&
-  echo "[$SCRIPT_DIR] Kernel installed successfully." ||
-  echo "[$SCRIPT_DIR] Warning: Kernel packages failed to install"
-) &
+print(f"[info] SCRIPT_DIR={SCRIPT_DIR}")
+print(f"[info] HOME_DIR={HOME_DIR}")
 
 # =============================================================================
-# (B) .Rprofile — run in background, SKIP if exists
+# Helpers
 # =============================================================================
-setup_rprofile() {
-  local TEMPLATE_PATH="$SCRIPT_DIR/.Rprofile.template"
-  local OUT_PATH="$HOME_DIR/.Rprofile"
-  local ENABLE_BSPM="yes"
-  local STARTUP_PKGS=' "tidyverse", "ggplot2", "dplyr", "readr", "tibble", "data_table", "rmarkdown", "knitr", "httpgd" '
+def run(cmd: str, *, check: bool = True, timeout: Optional[int] = 30) -> subprocess.CompletedProcess:
+    """Run a shell command safely."""
+    return subprocess.run(
+        cmd if isinstance(cmd, list) else shlex.split(cmd),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        timeout=timeout,
+        check=check,
+    )
 
-  if [[ -f "$OUT_PATH" ]]; then
-    echo ".Rprofile already exists at $OUT_PATH — skipping template render."
-    return 0
-  fi
+def read_os_release():
+    distro = ""
+    codename = ""
+    version_id = ""
+    # Try lsb_release first (may not exist in minimal images)
+    try:
+        out = run("lsb_release -si", check=True).stdout.strip().lower()
+        if out:
+            distro = out
+        out = run("lsb_release -sc", check=True).stdout.strip()
+        if out:
+            codename = out
+    except Exception:
+        pass
 
-  if [[ ! -f "$TEMPLATE_PATH" ]]; then
-    echo "Template not found at: $TEMPLATE_PATH" >&2
-    return 1
-  fi
+    # Fallback /etc/os-release
+    try:
+        text = Path("/etc/os-release").read_text(encoding="utf-8")
+        kv = {}
+        for line in text.splitlines():
+            if "=" in line:
+                k, v = line.split("=", 1)
+                kv[k.strip()] = v.strip().strip('"')
+        distro = distro or kv.get("ID", "")
+        codename = codename or kv.get("VERSION_CODENAME", "")
+        version_id = kv.get("VERSION_ID", "")
+    except Exception:
+        pass
 
-  local DISTRO="" CODENAME="" VERSION_ID=""
-  if command -v lsb_release >/dev/null 2>&1; then
-    DISTRO="$(lsb_release -si 2>/dev/null | tr '[:upper:]' '[:lower:]' || true)"
-    CODENAME="$(lsb_release -sc 2>/dev/null || true)"
-  fi
-  if [[ -r /etc/os-release ]]; then
-    . /etc/os-release
-    DISTRO="${DISTRO:-$ID}"
-    CODENAME="${CODENAME:-${VERSION_CODENAME:-}}"
-    VERSION_ID="${VERSION_ID:-${VERSION_ID:-}}"
-  fi
+    return distro, codename, version_id
 
-  local CRAN_URL="https://cloud.r-project.org"
-  case "$DISTRO" in
-    ubuntu)
-      CRAN_URL="https://packagemanager.posit.co/cran/__linux__/${CODENAME:-jammy}/latest"
-      ;;
-    debian)
-      if [[ -z "$CODENAME" ]]; then
-        case "$VERSION_ID" in
-          12*) CODENAME="bookworm" ;;
-          11*) CODENAME="bullseye" ;;
-          *)   CODENAME="bookworm" ;;
-        esac
-      fi
-      CRAN_URL="https://packagemanager.posit.co/cran/__linux__/${CODENAME}/latest"
-      ;;
-  esac
+def choose_cran_url(distro: str, codename: str, version_id: str) -> str:
+    cran = "https://cloud.r-project.org"
+    if distro == "ubuntu":
+        cran = f"https://packagemanager.posit.co/cran/__linux__/{codename or 'jammy'}/latest"
+    elif distro == "debian":
+        if not codename:
+            if version_id.startswith("12"):
+                codename = "bookworm"
+            elif version_id.startswith("11"):
+                codename = "bullseye"
+            else:
+                codename = "bookworm"
+        cran = f"https://packagemanager.posit.co/cran/__linux__/{codename}/latest"
+    return cran
 
-  local BSPM_BLOCK=""
-  if [[ "$ENABLE_BSPM" == "yes" ]]; then
-    read -r -d '' BSPM_BLOCK <<'EOF' || true
-if (requireNamespace("bspm", quietly = TRUE)) {
-  try(bspm::enable(), silent = TRUE)
-}
-EOF
-  fi
+def atomic_write(path: Path, data: str, mode: int = 0o644):
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(data, encoding="utf-8")
+    os.chmod(tmp, mode)
+    tmp.replace(path)
 
-  python3 - "$TEMPLATE_PATH" "$OUT_PATH" \
-    "$(printf '%s' "$CRAN_URL")" \
-    "$(printf '%s' "$BSPM_BLOCK")" \
-    "$(printf '%s' "$STARTUP_PKGS")" <<'PY'
-import sys, pathlib
-tpl_path = pathlib.Path(sys.argv[1])
-out_path = pathlib.Path(sys.argv[2])
-cran_url = sys.argv[3]
-bspm_block = sys.argv[4]
-startup_pkgs = sys.argv[5]
-text = tpl_path.read_text(encoding="utf-8")
-text = text.replace("__CRAN_URL__", cran_url)
-text = text.replace("__BSPM_BLOCK__", bspm_block)
-text = text.replace("__STARTUP_PKGS__", startup_pkgs)
-out_path.write_text(text, encoding="utf-8")
-PY
+def line_present(file: Path, needle: str) -> bool:
+    try:
+        return needle in file.read_text(encoding="utf-8").splitlines()
+    except FileNotFoundError:
+        return False
 
-  echo "Wrote: $OUT_PATH"
-  echo "  Distro: ${DISTRO:-unknown}  Codename: ${CODENAME:-unknown}"
-  echo "  CRAN:   $CRAN_URL"
-  echo "  bspm:   $ENABLE_BSPM"
-  echo "  pkgs:   $STARTUP_PKGS"
-}
+def append_line_if_missing(file: Path, line: str):
+    file.parent.mkdir(parents=True, exist_ok=True)
+    if not file.exists():
+        file.write_text(line + "\n", encoding="utf-8")
+        print(f"Added to {file}: {line}")
+        return
+    if not line_present(file, line):
+        with file.open("a", encoding="utf-8") as f:
+            f.write(line + "\n")
+        print(f"Added to {file}: {line}")
+    else:
+        print(f"Already present in {file}: {line}")
 
 # =============================================================================
-# (C) Renviron setup — run in background
+# (A) Kernel install — background placeholder (do NOT wait)
 # =============================================================================
-setup_renviron_and_shell() {
-  local RENVI="$HOME_DIR/.Renviron"
-  local ZSHRC="$HOME_DIR/.zshrc"
+def setup_jupyter_kernels():
+    try:
+        # TODO: add real kernel setup here
+        pass
+        print(f"[{SCRIPT_DIR}] Kernel installed successfully.")
+    except Exception as e:
+        print(f"[{SCRIPT_DIR}] Warning: Kernel packages failed to install: {e}")
 
-  [[ -f "$RENVI" ]] || touch "$RENVI"
-  [[ -f "$ZSHRC" ]] || touch "$ZSHRC"
+kernel_thread = threading.Thread(target=setup_jupyter_kernels, daemon=True)
+kernel_thread.start()  # do not join
 
-  local ENV_LINE='R_LIBS_USER=~/.R/libs/%V'
-  if ! grep -Fqx "$ENV_LINE" "$RENVI"; then
-    echo "$ENV_LINE" >> "$RENVI"
-    echo "Added R_LIBS_USER to $RENVI"
-  else
-    echo "R_LIBS_USER already present in $RENVI"
-  fi
+# =============================================================================
+# (B) .Rprofile — skip if exists; BSPM auto-on for Ubuntu
+# =============================================================================
+def setup_rprofile():
+    template_path = SCRIPT_DIR / ".Rprofile.template"
+    out_path = HOME_DIR / ".Rprofile"
+    startup_pkgs = ' "tidyverse", "ggplot2", "dplyr", "readr", "tibble", "data.table", "rmarkdown", "knitr", "httpgd" '
 
-  local INIT_LINE='mkdir -p ~/.R/libs/$(R -q -e "cat(getRversion())" | tr -d "\"")'
-  if ! grep -Fqx "$INIT_LINE" "$ZSHRC"; then
-    echo "$INIT_LINE" >> "$ZSHRC"
-    echo "Added mkdir initialization to $ZSHRC"
-  else
-    echo "mkdir initialization already present in $ZSHRC"
-  fi
+    if out_path.exists():
+        print(f".Rprofile already exists at {out_path} — skipping template render.")
+        return
 
-  if command -v R >/dev/null 2>&1; then
-    local RVER
-    RVER="$(R -q -e 'cat(getRversion())' | tr -d '"')"
-    mkdir -p "$HOME_DIR/.R/libs/$RVER"
-    echo "Ensured user lib: $HOME_DIR/.R/libs/$RVER"
-  else
-    echo "R not found on PATH; skipping immediate dir creation."
-  fi
-}
+    if not template_path.exists():
+        raise FileNotFoundError(f"Template not found at: {template_path}")
 
-# ------------------------- run B & C in parallel -------------------------
-pids=()
+    distro, codename, version_id = read_os_release()
+    cran_url = choose_cran_url(distro, codename, version_id)
 
-setup_rprofile &   pids+=($!)
-setup_renviron_and_shell & pids+=($!)
+    enable_bspm = (distro == "ubuntu")
+    bspm_block = ""
+    if enable_bspm:
+        bspm_block = (
+            'if (requireNamespace("bspm", quietly = TRUE)) {\n'
+            '  try(bspm::enable(), silent = TRUE)\n'
+            '}\n'
+        )
 
-for pid in "${pids[@]}"; do
-  if ! wait "$pid"; then
-    echo "A setup task (PID $pid) failed." >&2
-    exit 1
-  fi
-done
+    text = template_path.read_text(encoding="utf-8")
+    text = text.replace("__CRAN_URL__", cran_url)
+    text = text.replace("__BSPM_BLOCK__", bspm_block)
+    text = text.replace("__STARTUP_PKGS__", startup_pkgs)
 
-echo "Done. Restart your shell or run: source ~/.zshrc"
+    atomic_write(out_path, text)
+    print("Wrote:", out_path)
+    print(f"  Distro: {distro or 'unknown'}  Codename: {codename or 'unknown'}")
+    print(f"  CRAN:   {cran_url}")
+    print(f"  bspm:   {'yes' if enable_bspm else 'no'}")
+    print(f"  pkgs:   {startup_pkgs}")
+
+# =============================================================================
+# (C) Renviron + shell init (idempotent)
+# =============================================================================
+def setup_renviron_and_shell():
+    renvi = HOME_DIR / ".Renviron"
+    zshrc = HOME_DIR / ".zshrc"
+    renvi.parent.mkdir(parents=True, exist_ok=True)
+    zshrc.parent.mkdir(parents=True, exist_ok=True)
+    renvi.touch(exist_ok=True)
+    zshrc.touch(exist_ok=True)
+
+    env_line = "R_LIBS_USER=~/.R/libs/%V"
+    append_line_if_missing(renvi, env_line)
+
+    init_line = 'mkdir -p ~/.R/libs/$(R -q -e "cat(getRversion())" | tr -d "\\"")'
+    append_line_if_missing(zshrc, init_line)
+
+    # Try to create ~/.R/libs/<R-version>, but don't fail if R isn't ready
+    try:
+        out = run('R -q -e "cat(getRversion())"', check=True)
+        rver = out.stdout.replace('"', "").strip()
+        if rver:
+            lib_dir = HOME_DIR / ".R" / "libs" / rver
+            lib_dir.mkdir(parents=True, exist_ok=True)
+            print(f"Ensured user lib: {lib_dir}")
+    except Exception:
+        print("Could not determine R version. Skipping immediate user lib creation.")
+
+# Run (B) and (C) in parallel and wait (but we do not wait for the kernel thread)
+threads = [
+    threading.Thread(target=setup_rprofile, daemon=False),
+    threading.Thread(target=setup_renviron_and_shell, daemon=False),
+]
+for t in threads:
+    t.start()
+for t in threads:
+    t.join()
+
+print("Done. Restart your shell or run: source ~/.zshrc")
