@@ -13,12 +13,8 @@ PROJECT_DIR=${1:-$DEFAULT_PROJECT_ROOT}
 SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
 
 setupJupyterKernels(){
-    # Installs javascript jupyter kernel
-    npm install -g tslab
-    tslab install --python=python3
-
-    # Remove the typescript kernel
-    rm -rf /usr/local/share/jupyter/kernels/tslab
+    npm install --prefix "/home/$USERNAME/.local" tslab
+    "/home/$USERNAME/.local/node_modules/tslab/bin/tslab" install --python=python3
 }
 
 (
