@@ -1,25 +1,29 @@
 #!/usr/bin/env python3
 """
-run-cpp: compile and run C++ files from the current directory.
+run-cpp: compile and run C++ projects.
 
 Defaults:
-  - Compiler: clang++ (auto-falls back to $CXX, g++, or version-suffixed compilers)
+  - Compiler: clang++ (falls back to $CXX, then g++, then versioned variants)
   - C++ standard: C++20
   - Build dir: /tmp/graderthan/ide/cpp/build
   - Output: app.bin
 
-Options:
-  -d / --build-dir DIR    Build directory
-  -c / --build-cmd CMD    Full build command template (must contain %OUTPUT% and %SOURCES%)
-  -o / --output NAME      Output executable name
-  -C / --compiler NAME    Compiler to use (default: clang++)
-  -v / --verbose          Verbose output
-  -h / --help             Show help
+Behavior:
+  - If you pass one or more source FILES or DIRS, this (by default) also adds all sibling
+    *.cpp in each provided path's directory AND its subdirectories (recursive).
+    Use --no-siblings to restrict to exactly what you passed.
+    Use --no-recursive to include only the top-level directory.
+  - If you pass no sources, it compiles *.cpp from the CURRENT directory (recursive by default).
+  - Custom build template (-c/--build-cmd) must include %SOURCES% and %OUTPUT%.
+  - Smart modules flag: adds -fmodules-ts only if sources look modular AND the compiler supports it.
 
-Smart modules flag:
-  - Detects if sources appear to use C++20 modules (tokens: `module` or `import`)
-  - Probes the compiler for -fmodules-ts support
-  - Adds -fmodules-ts only when both are true
+Examples:
+  run-cpp /path/to/cli.cpp                  # compiles all *.cpp under /path/to (recursive)
+  run-cpp --no-recursive /path/to/cli.cpp   # compiles all *.cpp beside cli.cpp (no subdirs)
+  run-cpp --no-siblings /path/to/cli.cpp    # compiles only cli.cpp
+  run-cpp /path/to/project/                 # compiles all *.cpp under that dir (recursive)
+  run-cpp                                    # compiles *.cpp under cwd (recursive)
+  run-cpp -c "clang++ -O2 %SOURCES% -o %OUTPUT%"
 """
 
 import argparse
@@ -31,60 +35,94 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Iterable, List, Optional, Set
 
 DEFAULT_BUILD_DIR = "/tmp/graderthan/ide/cpp/build"
+DEFAULT_OUTPUT_NAME = "app.bin"
+DEFAULT_COMPILER = "clang++"
 DEFAULT_BUILD_CMD_TEMPLATE = (
     "%SOURCES% -g -std=c++20 "
     "-Werror=uninitialized -Werror=nonnull -Werror=format "
     "-Werror=bool-compare -Werror=return-type -Werror=array-bounds -o"
 )
-DEFAULT_OUTPUT_NAME = "app.bin"
-DEFAULT_COMPILER = "clang++"
-
-
-def which(cmd: str) -> str | None:
-    return shutil.which(cmd)
-
-
-def pick_compiler(preferred: str | None) -> str:
-    # 1) explicit flag
-    if preferred and which(preferred):
-        return preferred
-
-    # 2) environment
-    cxx = os.environ.get("CXX")
-    if cxx and which(cxx):
-        return cxx
-
-    # 3) clang++ then g++
-    for cand in ("clang++", "g++"):
-        if which(cand):
-            return cand
-
-    # 4) fallbacks with versions
-    for base, vers in (("clang++-", range(23, 9, -1)), ("g++-", range(20, 9, -1))):
-        for v in vers:
-            cand = f"{base}{v}"
-            if which(cand):
-                return cand
-
-    sys.stderr.write("No suitable C++ compiler found (tried $CXX, clang++, g++, and version-suffixed variants).\n")
-    sys.exit(1)
-
 
 MODULES_TOKEN_RE = re.compile(r'(^|\W)(module|import)\b', re.MULTILINE)
 
 
-def sources_use_modules(paths: list[Path]) -> bool:
-    # Heuristic: look for `module` or `import` tokens in the sources.
+def which(cmd: str) -> Optional[str]:
+    return shutil.which(cmd)
+
+
+def pick_cxx_compiler(preferred: Optional[str]) -> str:
+    if preferred and which(preferred):
+        return preferred
+    cxx = os.environ.get("CXX")
+    if cxx and which(cxx):
+        return cxx
+    for cand in ("clang++", "g++"):
+        if which(cand):
+            return cand
+    for base, vers in (("clang++-", range(30, 9, -1)), ("g++-", range(20, 9, -1))):
+        for v in vers:
+            cand = f"{base}{v}"
+            if which(cand):
+                return cand
+    sys.stderr.write("No suitable C++ compiler found (tried --compiler, $CXX, clang++, g++, versioned variants).\n")
+    sys.exit(1)
+
+
+def collect_cpp_files_from_dir(root: Path, recursive: bool) -> Iterable[Path]:
+    if recursive:
+        return (p for p in root.rglob("*.cpp") if p.is_file())
+    else:
+        return (p for p in root.glob("*.cpp") if p.is_file())
+
+
+def normalize_sources(argv_paths: List[str], include_siblings: bool, recursive: bool) -> List[Path]:
+    """
+    If user provided paths:
+      - Resolve them (files or directories).
+      - Start with explicitly provided files.
+      - If include_siblings: for each provided file/dir, add *.cpp from that dir (and subdirs if recursive).
+    If none provided:
+      - Compile *.cpp from cwd (recursive by default).
+    """
+    result: Set[Path] = set()
+
+    if argv_paths:
+        given_paths = [Path(s).resolve() for s in argv_paths]
+
+        for p in given_paths:
+            if p.is_file() and p.suffix == ".cpp":
+                result.add(p)
+
+        if include_siblings:
+            dirs: Set[Path] = set()
+            for p in given_paths:
+                if p.is_dir():
+                    dirs.add(p)
+                else:
+                    dirs.add(p.parent)
+
+            for d in dirs:
+                for f in collect_cpp_files_from_dir(d, recursive=recursive):
+                    result.add(f)
+    else:
+        cwd = Path(".").resolve()
+        for f in collect_cpp_files_from_dir(cwd, recursive=recursive):
+            result.add(f)
+
+    return sorted(result)
+
+
+def sources_use_modules(paths: List[Path]) -> bool:
     for p in paths:
         try:
             with open(p, "r", encoding="utf-8", errors="ignore") as f:
-                text = f.read(8192)  # first ~8KB is enough for a quick check
+                text = f.read(8192)
             if MODULES_TOKEN_RE.search(text):
                 return True
         except OSError:
-            # Ignore unreadable files and keep checking others
             continue
     return False
 
@@ -93,27 +131,22 @@ def compiler_supports_flag(compiler: str, flag: str) -> bool:
     try:
         proc = subprocess.run(
             [compiler, "-x", "c++", "-std=c++20", flag, "-", "-o", os.devnull],
-            input=b"int main() { return 0; }\n",
+            input=b"int main(){return 0;}\n",
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            check=False,
         )
         return proc.returncode == 0
     except OSError:
         return False
 
 
-def build_command(compiler: str, sources: list[Path], output_path: Path,
-                  custom: str | None, verbose: bool, add_modules_flag: bool) -> str:
+def build_command(compiler: str, sources: List[Path], output_path: Path,
+                  custom: Optional[str], add_modules_flag: bool) -> str:
+    srcs = " ".join(shlex.quote(str(s)) for s in sources)
     if custom:
-        # Replace placeholders in user template
-        srcs = " ".join(shlex.quote(str(s)) for s in sources)
         cmd = custom.replace("%OUTPUT%", shlex.quote(str(output_path)))
         cmd = cmd.replace("%SOURCES%", srcs)
         return cmd
-
-    # Default command
-    srcs = " ".join(shlex.quote(str(s)) for s in sources)
     template = DEFAULT_BUILD_CMD_TEMPLATE.replace("%SOURCES%", srcs)
     pieces = [shlex.quote(compiler)]
     if add_modules_flag:
@@ -130,96 +163,91 @@ def main() -> int:
                         help="Full build command template with %OUTPUT% and %SOURCES% placeholders.")
     parser.add_argument("-o", "--output", default=None)
     parser.add_argument("-C", "--compiler", default=None)
+    parser.add_argument("--no-siblings", action="store_true",
+                        help="Do NOT auto-include sibling *.cpp files next to provided paths.")
+    parser.add_argument("--no-recursive", action="store_true",
+                        help="When including siblings or scanning dirs, do NOT recurse into subdirectories.")
     parser.add_argument("-v", "--verbose", action="store_true")
     parser.add_argument("-h", "--help", action="store_true")
-    parser.add_argument("sources", nargs="*")
-
+    parser.add_argument("paths", nargs="*",
+                        help="Source files or directories to compile.")
     args = parser.parse_args()
 
     if args.help:
         print(__doc__)
         return 0
 
-    build_dir = Path(args.build_dir)
-    output_name = args.output or DEFAULT_OUTPUT_NAME
-    output_path = build_dir / output_name
+    recursive = not args.no_recursive
+    sources = normalize_sources(args.paths, include_siblings=not args.no_siblings, recursive=recursive)
 
-    # Collect sources
-    if args.sources:
-        source_paths = [Path(s) for s in args.sources]
-    else:
-        # Default to *.cpp
-        source_paths = [Path(p) for p in sorted(glob.glob("*.cpp"))]
-        if args.verbose:
-            print(f"No source files specified, defaulting to *.cpp -> {', '.join(map(str, source_paths)) or '(none)'}")
-
-    if not source_paths:
-        sys.stderr.write("No source files provided and no *.cpp found in the current directory.\n")
+    if not sources:
+        sys.stderr.write("No C++ sources found.\n")
         return 1
 
-    # Pick compiler
-    compiler = pick_compiler(args.compiler)
+    if args.verbose:
+        print("Sources:")
+        for p in sources:
+            print(f"  {p}")
+
+    compiler = pick_cxx_compiler(args.compiler)
     if args.verbose:
         print(f"Using compiler: {compiler}")
 
-    # Ensure build dir exists
+    build_dir = Path(args.build_dir).resolve()
+    output_name = args.output or DEFAULT_OUTPUT_NAME
+    output_path = build_dir / output_name
+
     if args.verbose:
-        print(f"Ensuring directory {build_dir} exists...")
+        print(f"Ensuring build directory exists: {build_dir}")
     build_dir.mkdir(parents=True, exist_ok=True)
 
-    # Remove old output (if any)
     if output_path.exists():
         if args.verbose:
-            print(f"Removing existing executable {output_path}...")
+            print(f"Removing existing executable: {output_path}")
         try:
             output_path.unlink()
         except OSError as e:
             sys.stderr.write(f"Failed to remove existing output: {e}\n")
             return 1
 
-    # Smarter modules flag: only if sources appear to use modules AND compiler supports -fmodules-ts
     add_modules_flag = False
-    if args.build_cmd is None:  # only affects the default command path
-        if sources_use_modules(source_paths) and compiler_supports_flag(compiler, "-fmodules-ts"):
+    if args.build_cmd is None:
+        if sources_use_modules(sources) and compiler_supports_flag(compiler, "-fmodules-ts"):
             add_modules_flag = True
             if args.verbose:
-                print("Detected module-like tokens in sources and compiler supports -fmodules-ts; enabling it.")
+                print("Detected modules and compiler supports -fmodules-ts; enabling it.")
         elif args.verbose:
-            print("Skipping -fmodules-ts (either sources don't look modular or compiler doesn't support it).")
+            print("Skipping -fmodules-ts (no modules detected or compiler doesn't support it).")
 
-    # Build command string
-    cmd = build_command(compiler, source_paths, output_path, args.build_cmd, args.verbose, add_modules_flag)
+    cmd = build_command(compiler, sources, output_path, args.build_cmd, add_modules_flag)
     if args.verbose:
         print("Build command:")
         print(f"  {cmd}")
         print("Compiling...")
 
-    # Compile
     if args.verbose:
-        compile_proc = subprocess.run(cmd, shell=True)
-        rc = compile_proc.returncode
+        proc = subprocess.run(cmd, shell=True)
+        rc = proc.returncode
         if rc != 0:
             print("Compilation failed.", file=sys.stderr)
             return rc or 1
     else:
-        compile_proc = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-        rc = compile_proc.returncode
+        proc = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        rc = proc.returncode
         if rc != 0:
             print("Compilation failed.", file=sys.stderr)
             print("Compiler output:", file=sys.stderr)
-            # Print captured output once
-            if compile_proc.stdout:
-                sys.stderr.write(compile_proc.stdout)
-            if compile_proc.stderr:
-                sys.stderr.write(compile_proc.stderr)
+            if proc.stdout:
+                sys.stderr.write(proc.stdout)
+            if proc.stderr:
+                sys.stderr.write(proc.stderr)
             return rc or 1
 
-    # Run the program
     if args.verbose:
         print(f"Running {output_path}...")
     try:
-        run_proc = subprocess.run([str(output_path)])
-        return run_proc.returncode
+        run = subprocess.run([str(output_path)])
+        return run.returncode
     except OSError as e:
         sys.stderr.write(f"Failed to run {output_path}: {e}\n")
         return 1
