@@ -5,6 +5,12 @@ local({
   repos["CRAN"] <- "__CRAN_URL__"  # e.g. PPM noble/jammy URL
   options(repos = repos)
 
+  # Ensure user library exists (silent, no console output)
+  local({
+    libdir <- file.path(path.expand("~/.R/libs"), as.character(getRversion()))
+    if (!dir.exists(libdir)) dir.create(libdir, recursive = TRUE, showWarnings = FALSE)
+  })
+
   # ---- BSPM (auto-inserted on Ubuntu) ----
   __BSPM_BLOCK__
 
@@ -61,4 +67,3 @@ local({
 })
 
 # Use like: getOption("graderthan.fast_install")(c("ggplot2","dplyr"))
-

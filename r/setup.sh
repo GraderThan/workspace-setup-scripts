@@ -157,52 +157,11 @@ def setup_rprofile():
 def setup_renviron_and_shell():
     renvi = HOME_DIR / ".Renviron"
     zshrc = HOME_DIR / ".zshrc"
-    renvi.parent.mkdir(parents=True, exist_ok=True)
-    zshrc.parent.mkdir(parents=True, exist_ok=True)
     renvi.touch(exist_ok=True)
     zshrc.touch(exist_ok=True)
 
     env_line = "R_LIBS_USER=~/.R/libs/%V"
     append_line_if_missing(renvi, env_line)
-
-    init_line = 'mkdir -p ~/.R/libs/$(R -q --vanilla -e "cat(getRversion())" | tr -d "\\"")'
-    append_line_if_missing(zshrc, init_line)
-
-    # Try to create ~/.R/libs/<R-version>, ignoring startup files
-    rver = ""
-    base_env = os.environ.copy()
-    base_env["R_PROFILE_USER"] = "/dev/null"
-    base_env["R_ENVIRON_USER"] = "/dev/null"
-
-    def try_get_ver(cmd):
-        try:
-            cp = subprocess.run(
-                cmd, shell=True, text=True,
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                env=base_env, timeout=20, check=True
-            )
-            return cp.stdout.replace('"', "").strip()
-        except Exception:
-            return ""
-
-    # Preferred probes
-    rver = try_get_ver('R -q --vanilla -e "cat(getRversion())"')
-    if not rver:
-        rver = try_get_ver('Rscript --vanilla -e "cat(getRversion())"')
-
-    if rver:
-        lib_dir = HOME_DIR / ".R" / "libs" / rver
-        lib_dir.mkdir(parents=True, exist_ok=True)
-        print(f"Ensured user lib: {lib_dir}")
-    else:
-        # Last hint for debugging
-        print("Could not determine R version. Skipping immediate user lib creation.")
-        try:
-            cp = subprocess.run("which R", shell=True, text=True,
-                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=10)
-            print("which R ->", cp.stdout.strip() or "(not found)")
-        except Exception:
-            pass
 
 
 # Run (B) and (C) in parallel and wait (but we do not wait for the kernel thread)
