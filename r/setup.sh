@@ -102,6 +102,11 @@ def append_line_if_missing(file: Path, line: str):
     else:
         print(f"Already present in {file}: {line}")
 
+    # Ensure file ends with newline
+    content = file.read_text(encoding="utf-8")
+    if content and not content.endswith("\n"):
+        file.write_text(content + "\n", encoding="utf-8")
+
 
 def apt_available() -> bool:
     # Consider apt present if either apt-get or apt is on PATH
@@ -132,7 +137,7 @@ kernel_thread.start()  # do not join
 def setup_rprofile():
     template_path = SCRIPT_DIR / ".Rprofile.template"
     out_path = HOME_DIR / ".Rprofile"
-    startup_pkgs = ' "tidyverse", "ggplot2", "dplyr", "readr", "tibble", "data.table", "rmarkdown", "knitr", "httpgd" '
+    startup_pkgs = ' "tidyverse", "ggplot2", "dplyr", "readr", "tibble", "rmarkdown", "knitr", "httpgd" '
 
     if out_path.exists():
         print(
@@ -164,6 +169,8 @@ def setup_rprofile():
     text = text.replace("__BSPM_BLOCK__", bspm_block)
     text = text.replace("__STARTUP_PKGS__", startup_pkgs)
 
+    if not text.endswith("\n"):
+        text += "\n"
     atomic_write(out_path, text)
     print("Wrote:", out_path)
     print(
@@ -183,10 +190,10 @@ def setup_renviron_and_userlib():
     renvi.parent.mkdir(parents=True, exist_ok=True)
 
     # Ensure R_LIBS_USER is set
-    env_line = "R_LIBS_USER=~/.R/libs/%V"
+    env_line = f"R_LIBS_USER={HOME_DIR}/.R/libs/%V"
     append_line_if_missing(renvi, env_line)
 
-    env_line = "R_PROFILE_USER=~/.Rprofile"
+    env_line = f"R_PROFILE_USER={HOME_DIR}/.Rprofile"
     append_line_if_missing(renvi, env_line)
 
     # Create ~/.R/libs/%V now (quiet, no console output in zsh)
