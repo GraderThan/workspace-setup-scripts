@@ -49,21 +49,17 @@ local({
       readr.show_col_types = FALSE
     )
 
-    # VS Code: auto-use httpgd if available (optional)
+    # VS Code / GUI plotting: use httpgd if available, but NEVER auto-open a browser
+    # (Set a global option and don't call hgd_browse())
+    options(httpgd.autobrowse = FALSE)
     if (requireNamespace("httpgd", quietly = TRUE)) {
-      options(device = function(...) httpgd::hgd(silent = TRUE))
-      if (interactive()) try(httpgd::hgd_browse(), silent = TRUE)
+      has_vscode <- nzchar(Sys.getenv("VSCODE_PID")) || identical(Sys.getenv("TERM_PROGRAM"), "vscode")
+      has_x11    <- nzchar(Sys.getenv("DISPLAY"))
+      if (has_vscode || has_x11) {
+        options(device = function(...) httpgd::hgd(silent = TRUE))
+      }
     }
 
     cat("\033[1;34mGrader Than - R Profile Loaded\033[0m\n")
-    # cat(" - CRAN:", repos[["CRAN"]], "\n")
-    # cat(" - Ncpus:", getOption("Ncpus"), "\n")
-    # if (requireNamespace("pak", quietly = TRUE)) cat(" - pak: available (fast installs)\n")
-    # if (requireNamespace("bspm", quietly = TRUE)) {
-      # Just a friendly hint; enablement is handled above if inserted
-      # cat(" - bspm: package detected\n")
-    # }
   }
 })
-
-# Use like: getOption("graderthan.fast_install")(c("ggplot2","dplyr"))
