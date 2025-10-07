@@ -83,7 +83,7 @@ def atomic_write(path: Path, data: str, mode: int = 0o644):
 
 def line_present(file: Path, needle: str) -> bool:
     try:
-        return needle in file.read_text(encoding="utf-8").splitlines()
+        return needle.strip() in [l.strip() for l in file.read_text(encoding="utf-8").splitlines()]
     except FileNotFoundError:
         return False
 
@@ -184,6 +184,9 @@ def setup_renviron_and_userlib():
 
     # Ensure R_LIBS_USER is set
     env_line = "R_LIBS_USER=~/.R/libs/%V"
+    append_line_if_missing(renvi, env_line)
+
+    env_line = "R_PROFILE_USER=~/.Rprofile"
     append_line_if_missing(renvi, env_line)
 
     # Create ~/.R/libs/%V now (quiet, no console output in zsh)
