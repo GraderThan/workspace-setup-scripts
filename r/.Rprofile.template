@@ -55,14 +55,14 @@ local({
       if (interactive()) try(httpgd::hgd_browse(), silent = TRUE)
     }
 
-    cat("\033[1;34mGrader Than - R Profile Loaded (Ubuntu/Nix)\033[0m\n")
-    cat(" - CRAN:", repos[["CRAN"]], "\n")
-    cat(" - Ncpus:", getOption("Ncpus"), "\n")
-    if (requireNamespace("pak", quietly = TRUE)) cat(" - pak: available (fast installs)\n")
-    if (requireNamespace("bspm", quietly = TRUE)) {
+    cat("\033[1;34mGrader Than - R Profile Loaded\033[0m\n")
+    # cat(" - CRAN:", repos[["CRAN"]], "\n")
+    # cat(" - Ncpus:", getOption("Ncpus"), "\n")
+    # if (requireNamespace("pak", quietly = TRUE)) cat(" - pak: available (fast installs)\n")
+    # if (requireNamespace("bspm", quietly = TRUE)) {
       # Just a friendly hint; enablement is handled above if inserted
-      cat(" - bspm: package detected\n")
-    }
+      # cat(" - bspm: package detected\n")
+    # }
   }
 })
 
