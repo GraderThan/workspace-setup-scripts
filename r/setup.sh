@@ -118,6 +118,7 @@ def apt_available() -> bool:
 
 
 def setup_jupyter_kernels():
+    print(f"[{SCRIPT_DIR}] Installing kernel packages...")
     try:
         run("R -q -e 'IRkernel::installspec(user=TRUE)'", check=True, timeout=120)
         print(f"[{SCRIPT_DIR}] Kernel packages successfully installed")
@@ -216,7 +217,6 @@ for t in threads:
 for t in threads:
     t.join()
 
-kernel_thread = threading.Thread(target=setup_jupyter_kernels, daemon=True)
-kernel_thread.start() 
-
-print("Done. Restart your shell or run: source ~/.zshrc")
+kernel_thread = threading.Thread(target=setup_jupyter_kernels, daemon=False)
+kernel_thread.start()
+kernel_thread.join()
