@@ -119,9 +119,7 @@ def apt_available() -> bool:
 
 def setup_jupyter_kernels():
     try:
-        # TODO: add real kernel setup here
-        pass
-        print(f"[{SCRIPT_DIR}] Kernel installed successfully.")
+        run("R -q -e 'IRkernel::installspec(user=TRUE)'", check=True, timeout=120)
     except Exception as e:
         print(f"[{SCRIPT_DIR}] Warning: Kernel packages failed to install: {e}")
 
