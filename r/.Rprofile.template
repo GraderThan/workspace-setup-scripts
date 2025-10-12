@@ -72,17 +72,6 @@ local({
       httpgd.autobrowse      = FALSE
     )
 
-    # --- Lazy-start httpgd on first plot (prevents "launch helper" warning) ---
-    if (requireNamespace("httpgd", quietly = TRUE)) {
-      setHook("plot.new", function(...) {
-        if (!isTRUE(getOption("graderthan.hgd.started", FALSE))) {
-          # start httpgd only once, silently
-          try(httpgd::hgd(silent = TRUE), silent = TRUE)
-          options(graderthan.hgd.started = TRUE)
-        }
-      }, action = "prepend")
-    }
-
     cat("\033[1;34mGrader Than - R Profile Loaded\033[0m\n")
   }
 })
