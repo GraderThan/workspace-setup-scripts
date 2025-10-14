@@ -8,6 +8,11 @@ failure() {
 }
 trap 'failure $LINENO "$BASH_COMMAND"' ERR
 
+if [ -z "${USERNAME+x}" ]; then
+  echo "Error: USERNAME is not set." >&2
+  exit 1
+fi
+
 DEFAULT_PROJECT_ROOT="/home/$USERNAME/Documents/code"
 PROJECT_DIR=${1:-$DEFAULT_PROJECT_ROOT}
 SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
