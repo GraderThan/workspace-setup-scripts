@@ -63,7 +63,7 @@ if [ ! -f "$PROJECT_DIR/package.json" ]; then
     cp "$SCRIPT_DIR/project.json" "$PROJECT_DIR/package.json"
 
     cd $PROJECT_DIR
-    npm install
+    npm install &
     echo "[$SCRIPT_DIR] Javascript project initialized successfully."
 else
     echo "[$SCRIPT_DIR] Javascript project already exists. Skipping initialization."
