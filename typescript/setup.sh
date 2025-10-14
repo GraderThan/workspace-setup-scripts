@@ -25,7 +25,7 @@ setupJupyterKernels(){
   # 2) Register the Jupyter kernel (if not yet registered)
   if ! jupyter kernelspec list 2>/dev/null | grep -q tslab; then
     echo "→ Registering tslab kernel with Jupyter..."
-    "$USER_HOME/.local/node_modules/tslab/bin/tslab" install --python=python3
+    "$USER_HOME/.local/node_modules/tslab/bin/tslab" install --python=python3 --binary="$USER_HOME/.local/bin/tslab"
   else
     echo "✓ tslab kernel already registered"
   fi
