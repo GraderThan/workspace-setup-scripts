@@ -8,11 +8,12 @@ failure() {
 }
 trap 'failure $LINENO "$BASH_COMMAND"' ERR
 
+SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
+
 cd "$HOME"
 
 DEFAULT_PROJECT_DIR="/home/$USERNAME/Documents/code"
 PROJECT_DIR=${1:-$DEFAULT_PROJECT_DIR}
-SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
 
 setupJupyterKernels(){
   KPATH=$(echo /nix/store/*-xeus-cling-*/share/jupyter/kernels/xcpp17)

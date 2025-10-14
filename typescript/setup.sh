@@ -60,8 +60,7 @@ if [ ! -f "$PROJECT_DIR/package.json" ]; then
     cp "$SCRIPT_DIR/project.json" "$PROJECT_DIR/package.json"
     cp "$SCRIPT_DIR/tsconfig.json" "$PROJECT_DIR/tsconfig.json"
 
-    cd $PROJECT_DIR
-    npm install &
+    (cd "$PROJECT_DIR" && npm install) &
     echo "[$SCRIPT_DIR] TypeScript project initialized successfully."
 else
     echo "[$SCRIPT_DIR] TypeScript project already exists. Skipping initialization."

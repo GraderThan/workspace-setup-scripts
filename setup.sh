@@ -8,6 +8,9 @@ failure() {
 }
 trap 'failure $LINENO "$BASH_COMMAND"' ERR
 
+# Get the directory of this script BEFORE changing directories
+TEMPLATE_DIR=$(dirname "$(readlink -f "$0")")
+
 cd "$HOME"
 
 # Check if first argument is provided
@@ -20,9 +23,6 @@ fi
 CODE_LANGUAGE=$1
 PROJECT_ROOT=${PROJECT_ROOT:-"/home/$USERNAME/Documents/code"}
 CACHE_DIR=${USER_CACHE_DIR:-"/home/$USERNAME/.gt-cache"}
-
-# Get the directory of this script
-TEMPLATE_DIR=$(dirname "$(readlink -f "$0")")
 
 # convert CODE_LANGUAGE to lowercase
 CODE_LANGUAGE=$(echo "$CODE_LANGUAGE" | tr '[:upper:]' '[:lower:]')

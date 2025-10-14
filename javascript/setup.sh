@@ -13,9 +13,9 @@ if [ -z "${USERNAME+x}" ]; then
   exit 1
 fi
 
+SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
 DEFAULT_PROJECT_ROOT="/home/$USERNAME/Documents/code"
 PROJECT_DIR=${1:-$DEFAULT_PROJECT_ROOT}
-SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
 
 cd "$HOME"
 
@@ -64,8 +64,7 @@ setupJupyterKernels(){
 if [ ! -f "$PROJECT_DIR/package.json" ]; then
     cp "$SCRIPT_DIR/project.json" "$PROJECT_DIR/package.json"
 
-    cd $PROJECT_DIR
-    npm install &
+    (cd "$PROJECT_DIR" && npm install) &
     echo "[$SCRIPT_DIR] Javascript project initialized successfully."
 else
     echo "[$SCRIPT_DIR] Javascript project already exists. Skipping initialization."
