@@ -11,6 +11,8 @@ trap 'failure $LINENO "$BASH_COMMAND"' ERR
 DEFAULT_PROJECT_DIR="/home/$USERNAME/Documents/code"
 PROJECT_DIR=${1:-$DEFAULT_PROJECT_DIR}
 
+cd "$HOME"
+
 # If venv does not exist, create it
 if [ ! -d "$PROJECT_DIR/.venv" ]; then
     python3 -m venv --copies --system-site-packages "$PROJECT_DIR/.venv"

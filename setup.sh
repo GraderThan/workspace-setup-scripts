@@ -8,6 +8,7 @@ failure() {
 }
 trap 'failure $LINENO "$BASH_COMMAND"' ERR
 
+cd "$HOME"
 
 # Check if first argument is provided
 if [ $# -eq 0 ]; then

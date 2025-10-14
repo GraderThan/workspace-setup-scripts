@@ -27,6 +27,7 @@ def run(cmd: str, *, check: bool = True, timeout: Optional[int] = 30) -> subproc
         text=True,
         timeout=timeout,
         check=check,
+        cwd=HOME_DIR,
     )
 
 

@@ -12,6 +12,8 @@ DEFAULT_PROJECT_DIR="/home/$USERNAME/Documents/code"
 PROJECT_DIR=${1:-$DEFAULT_PROJECT_DIR}
 SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
 
+cd "$HOME"
+
 setupJupyterKernels(){
   USER_HOME="/home/$USERNAME"
   # 1) Install tslab if not already installed

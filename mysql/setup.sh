@@ -8,6 +8,8 @@ failure() {
 }
 trap 'failure $LINENO "$BASH_COMMAND"' ERR
 
+cd "$HOME"
+
 DEFAULT_PROJECT_DIR="/home/$USERNAME/Documents/code"
 PROJECT_DIR=${1:-$DEFAULT_PROJECT_DIR}
 
