@@ -34,7 +34,7 @@ if [ ! -d "$PROJECT_DIR/.venv" ]; then
       ipyvolume \
       nglview \
       mobilechelonian \
-      rope
+      rope &
 
     echo "[$SCRIPT_DIR] Python virtual environment created and packages installed successfully."
 else
