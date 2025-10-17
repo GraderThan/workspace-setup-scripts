@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import json
 import os
 import shlex
 import shutil
@@ -208,6 +209,59 @@ def setup_renviron_and_userlib():
         print(f"Ensured user lib: {libdir}")
 
 
+# =============================================================================
+# (D) Update IDE settings with R paths
+# =============================================================================
+
+
+def update_ide_settings():
+    settings_path = HOME_DIR / ".local/share/gt-ide/User/settings.json"
+
+    # Get R and radian paths, with fallback to devbox nix profile
+    r_path = shutil.which("R") or ""
+    if not r_path:
+        devbox_r = HOME_DIR / ".config/environment/.devbox/nix/profile/default/bin/R"
+        if devbox_r.exists():
+            r_path = str(devbox_r)
+
+    radian_path = shutil.which("radian") or ""
+    if not radian_path:
+        devbox_radian = HOME_DIR / ".config/environment/.devbox/nix/profile/default/bin/radian"
+        if devbox_radian.exists():
+            radian_path = str(devbox_radian)
+
+    if not r_path and not radian_path:
+        print("Neither R nor radian found in PATH - skipping IDE settings update")
+        return
+
+    # Ensure settings directory exists
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Load existing settings or create empty dict
+    if settings_path.exists():
+        try:
+            settings = json.loads(settings_path.read_text(encoding="utf-8"))
+        except Exception:
+            settings = {}
+    else:
+        settings = {}
+
+    # Update settings
+    if r_path:
+        settings["r.rpath.linux"] = r_path
+        print(f"Updated r.rpath.linux to {r_path}")
+
+    if radian_path:
+        settings["r.rterm.linux"] = radian_path
+        print(f"Updated r.rterm.linux to {radian_path}")
+
+    # Write back to file
+    try:
+        settings_path.write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
+    except Exception as e:
+        print(f"Warning: Failed to write settings file: {e}")
+
+
 # Run (B) and (C) in parallel and wait (kernel thread remains background)
 threads = [
     threading.Thread(target=setup_rprofile, daemon=False),
@@ -221,3 +275,5 @@ for t in threads:
 kernel_thread = threading.Thread(target=setup_jupyter_kernels, daemon=False)
 kernel_thread.start()
 kernel_thread.join()
+
+update_ide_settings()
