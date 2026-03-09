@@ -16,30 +16,36 @@ cd "$HOME"
 
 # If venv does not exist, create it
 if [ ! -d "$PROJECT_DIR/.venv" ]; then
-    python3 -m venv --copies --system-site-packages --without-pip "$PROJECT_DIR/.venv"
     
-    source "$PROJECT_DIR/.venv/bin/activate"
+    (
+      python3 -m venv --copies --system-site-packages --without-pip "$PROJECT_DIR/.venv"
+      echo "[$SCRIPT_DIR] Python virtual environment created successfully."
+      
+      source "$PROJECT_DIR/.venv/bin/activate"
     
-    pip install \
-      black \
-      isort \
-      mypy \
-      pylint \
-      pytest \
-      pytest-cov \
-      ipython \
-      ipykernel \
-      jupyterlab \
-      ipywidgets \
-      bqplot \
-      pythreejs \
-      ipyleaflet \
-      ipyvolume \
-      nglview \
-      mobilechelonian \
-      rope &
+      pip install \
+        black \
+        isort \
+        mypy \
+        pylint \
+        pytest \
+        pytest-cov \
+        ipython \
+        ipykernel \
+        jupyterlab \
+        ipywidgets \
+        bqplot \
+        pythreejs \
+        ipyleaflet \
+        ipyvolume \
+        nglview \
+        mobilechelonian \
+        rope
+        
+        echo "[$SCRIPT_DIR] Python default packages installed successfully."
+      )&
 
-    echo "[$SCRIPT_DIR] Python virtual environment created and packages installed successfully."
+    echo "[$SCRIPT_DIR] Python virtual environment creation and packages install in the background."
 else
     echo "[$SCRIPT_DIR] Python virtual environment already exists. Skipping creation."
 fi
